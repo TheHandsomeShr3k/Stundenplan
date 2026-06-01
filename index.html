@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>WVS2024/4 · Stundenplan</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg-2: #0f1421;
+    --card: #151b2b;
+    --card-hi: #1b2336;
+    --line: #232c42;
+    --txt: #eef2fb;
+    --muted: #7e8aa5;
+    --dim: #515d78;
+    --accent: #5b8cff;
+    --accent-2: #8b6cff;
+    --live: #2fd47a;
+    --exam: #ff6b6b;
+    --exam-dim: #c44;
+    --warn: #ffb454;
+    --display: "Bricolage Grotesque", "Space Grotesk", sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); }
+  body {
+    font-family: var(--body);
+    color: var(--txt);
+    min-height: 100vh;
+    padding: max(20px, env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom));
+    background:
+      radial-gradient(1100px 600px at 90% -5%, rgba(91,140,255,0.12), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(139,108,255,0.10), transparent 55%),
+      var(--bg);
+    max-width: 720px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* Kopf */
+  .top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .top h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 1.45rem;
+    letter-spacing: -0.02em;
+  }
+  .top .kurs { color: var(--accent); }
+  .stand { font-size: 0.72rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .clock { color: var(--muted); font-size: 0.85rem; margin-bottom: 22px; font-variant-numeric: tabular-nums; }
+
+  /* Tabs */
+  .tabs {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    display: flex; gap: 4px; z-index: 50;
+    background: rgba(21,27,43,0.82);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--line); border-radius: 16px; padding: 5px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .tabs button {
+    font-family: var(--body); font-size: 0.86rem; font-weight: 600;
+    color: var(--muted); background: transparent; border: none;
+    padding: 9px 18px; border-radius: 11px; cursor: pointer; transition: all .18s;
+  }
+  .tabs button.active { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+
+  .view { display: none; animation: fade .35s ease; }
+  .view.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* Jetzt-Karte */
+  .now-hero {
+    background: linear-gradient(150deg, var(--card-hi), var(--card));
+    border: 1px solid var(--line); border-radius: 20px; padding: 22px; margin-bottom: 14px;
+    position: relative; overflow: hidden;
+  }
+  .now-hero::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(400px 200px at 100% 0, rgba(47,212,122,0.10), transparent 60%);
+    pointer-events: none;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--live); margin-bottom: 14px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 0 rgba(47,212,122,0.6); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(47,212,122,0.5);} 70%{box-shadow:0 0 0 10px rgba(47,212,122,0);} 100%{box-shadow:0 0 0 0 rgba(47,212,122,0);} }
+  .now-hero .fach { font-family: var(--display); font-weight: 800; font-size: 1.9rem; letter-spacing: -0.02em; line-height: 1.1; }
+  .now-hero .meta { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
+  .now-hero .meta b { color: var(--txt); font-weight: 600; }
+  .now-empty { color: var(--muted); font-size: 1.05rem; }
+  .now-empty .big { font-family: var(--display); font-weight: 800; font-size: 1.6rem; color: var(--txt); display:block; margin-bottom: 6px;}
+
+  .next-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin: 22px 4px 10px; font-weight: 700; }
+
+  /* Listen-Eintrag */
+  .row {
+    display: flex; gap: 14px; align-items: stretch;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 9px;
+  }
+  .row .time { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.9rem; color: var(--accent); min-width: 52px; }
+  .row .time .end { display:block; color: var(--dim); font-weight: 500; font-size: 0.78rem; }
+  .row .body { flex: 1; min-width: 0; }
+  .row .body .f { font-weight: 600; font-size: 1rem; }
+  .row .body .d { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .row .body .r { color: var(--dim); font-size: 0.8rem; }
+  .row.special { opacity: 0.6; }
+  .row.special .time { color: var(--dim); }
+
+  /* Klausuren */
+  .exam {
+    background: linear-gradient(150deg, rgba(255,107,107,0.08), var(--card));
+    border: 1px solid rgba(255,107,107,0.25); border-radius: 16px; padding: 16px 18px; margin-bottom: 11px;
+  }
+  .exam .top-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .exam .dt { font-family: var(--display); font-weight: 800; font-size: 1.1rem; color: var(--exam); }
+  .exam .cd { font-size: 0.78rem; color: var(--warn); font-weight: 600; white-space: nowrap; }
+  .exam .mod { font-weight: 600; margin-top: 8px; font-size: 1.02rem; }
+  .exam .sub { color: var(--muted); font-size: 0.86rem; margin-top: 5px; }
+  .exam .grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .exam .chip { font-size: 0.76rem; background: var(--card-hi); border: 1px solid var(--line); color: var(--muted); padding: 4px 10px; border-radius: 8px; }
+  .exam .chip b { color: var(--txt); font-weight: 600; }
+  .exam.soft { background: var(--card); border-color: var(--line); }
+  .exam.soft .dt { color: var(--muted); font-size: 0.95rem; }
+
+  /* Woche */
+  .day { margin-bottom: 18px; }
+  .day h3 { font-family: var(--display); font-weight: 700; font-size: 0.95rem; color: var(--txt); margin-bottom: 8px; padding-left: 4px; }
+  .day h3 span { color: var(--dim); font-weight: 500; font-size: 0.85rem; }
+  .day h3.today { color: var(--accent); }
+  .weeknav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 10px; }
+  .weeknav button { background: var(--card); border: 1px solid var(--line); color: var(--txt); width: 42px; height: 42px; border-radius: 11px; font-size: 1.2rem; cursor: pointer; }
+  .weeknav .wk { font-family: var(--display); font-weight: 700; }
+  .weeknav .wk span { color: var(--dim); font-weight: 400; font-size: 0.8rem; display:block; }
+
+  /* Status / Fehler */
+  .status { text-align: center; color: var(--muted); padding: 40px 20px; }
+  .spinner { width: 30px; height: 30px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .err-box { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.3); border-radius: 14px; padding: 18px; color: var(--txt); font-size: 0.9rem; }
+  .err-box code { background: var(--bg-2); padding: 2px 6px; border-radius: 5px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Stundenplan <span class="kurs">WVS2024/4</span></h1>
+</div>
+<div class="clock" id="clock">—</div>
+
+<div id="app">
+  <div class="status"><div class="spinner"></div>Lade Plan …</div>
+</div>
+
+<nav class="tabs">
+  <button data-view="now" class="active">Jetzt</button>
+  <button data-view="exams">Klausuren</button>
+  <button data-view="week">Woche</button>
+</nav>
+
+<script>
+const MONTHS = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+const WD = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const WD_FULL = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+
+let DATA = null;
+let weekOffset = 0;
+
+// --- Datums-Helfer (Format: dd.mm.yyyy) ---
+function parseDate(s) {
+  const m = (s||"").match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (!m) return null;
+  return new Date(+m[3], +m[2]-1, +m[1]);
+}
+function parseTime(d, hhmm) {
+  const [h, mi] = hhmm.split(":").map(Number);
+  const x = new Date(d); x.setHours(h, mi, 0, 0); return x;
+}
+function fmtDateShort(d) { return `${d.getDate()}. ${MONTHS[d.getMonth()]}`; }
+function sameDay(a, b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function startOfWeek(d) { const x = new Date(d); const day = (x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+function daysUntil(d) { const t = new Date(); t.setHours(0,0,0,0); return Math.round((d - t)/86400000); }
+
+// --- Uhr ---
+function tickClock() {
+  const n = new Date();
+  document.getElementById("clock").textContent =
+    `${WD_FULL[n.getDay()]}, ${n.getDate()}. ${MONTHS[n.getMonth()]} ${n.getFullYear()} · ${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
+}
+
+// --- Daten laden ---
+async function load() {
+  try {
+    const res = await fetch("data.json?_=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    DATA = await res.json();
+    try { localStorage.setItem("plan_cache", JSON.stringify(DATA)); } catch(e){}
+    render();
+  } catch (e) {
+    const cached = (()=>{ try { return JSON.parse(localStorage.getItem("plan_cache")); } catch(_) { return null; } })();
+    if (cached) { DATA = cached; render(); flashOffline(); }
+    else showError(e.message);
+  }
+}
+function flashOffline() {
+  const s = document.createElement("div");
+  s.className = "stand"; s.style.color = "var(--warn)"; s.style.marginBottom="10px";
+  s.textContent = "⚠ Offline – zeige zuletzt gespeicherte Version";
+  document.getElementById("app").prepend(s);
+}
+function showError(msg) {
+  document.getElementById("app").innerHTML =
+    `<div class="err-box"><b>Plan konnte nicht geladen werden.</b><br><br>
+     Fehler: <code>${msg}</code><br><br>
+     Wenn die App über GitHub Pages läuft, prüfe, ob <code>data.json</code> neben der
+     App liegt und der tägliche Abruf (GitHub Actions) schon einmal gelaufen ist.</div>`;
+}
+
+// --- Eintraege eines Tages, sortiert ---
+function entriesFor(date) {
+  if (!DATA) return [];
+  return DATA.vorlesung.eintraege
+    .filter(e => { const d = parseDate(e.datum); return d && sameDay(d, date); })
+    .sort((a,b) => a.block - b.block);
+}
+
+// --- JETZT-Ansicht ---
+function renderNow() {
+  const now = new Date();
+  const todays = entriesFor(now).filter(e => !e.special);
+  let current = null, next = null;
+  for (const e of todays) {
+    const s = parseTime(parseDate(e.datum), e.start);
+    const en = parseTime(parseDate(e.datum), e.ende);
+    if (now >= s && now <= en) current = e;
+    else if (now < s && !next) next = e;
+  }
+  // naechster Tag mit Vorlesung, falls heute nichts mehr
+  let upcoming = [];
+  if (next) upcoming.push(next);
+  if (!current && !next) {
+    for (let i = 1; i <= 14; i++) {
+      const d = new Date(now); d.setDate(d.getDate()+i);
+      const list = entriesFor(d).filter(e=>!e.special);
+      if (list.length) { upcoming = list.slice(0,3); break; }
+    }
+  } else {
+    // restliche heutige nach 'next'
+    const after = todays.filter(e => parseTime(parseDate(e.datum), e.start) > now);
+    upcoming = after.slice(0, 3);
+  }
+
+  let html = "";
+  if (current) {
+    html += `<div class="now-hero">
+      <div class="badge"><span class="dot"></span>Läuft gerade</div>
+      <div class="fach">${esc(current.fach)}</div>
+      <div class="meta">${current.dozent ? "bei <b>"+esc(current.dozent)+"</b> · " : ""}<b>${current.start}–${current.ende}</b> · Raum <b>${esc(current.raum)}</b></div>
+    </div>`;
+  } else {
+    const n = new Date();
+    const todayHasLater = todays.some(e => parseTime(parseDate(e.datum), e.start) > n);
+    html += `<div class="now-hero"><div class="now-empty">
+      <span class="big">${todayHasLater ? "Gerade Pause" : "Keine Vorlesung gerade"}</span>
+      ${todayHasLater ? "Die nächste Veranstaltung steht unten." : "Genieß die freie Zeit."}
+    </div></div>`;
+  }
+
+  if (upcoming.length) {
+    html += `<div class="next-label">Als Nächstes</div>`;
+    for (const e of upcoming) {
+      const d = parseDate(e.datum);
+      const dayTag = sameDay(d, new Date()) ? "" : ` · ${WD[d.getDay()]} ${fmtDateShort(d)}`;
+      html += rowHTML(e, dayTag);
+    }
+  }
+  return html;
+}
+
+function rowHTML(e, dayTag="") {
+  if (e.special) {
+    return `<div class="row special"><div class="time">—</div>
+      <div class="body"><div class="f">${esc(e.fach)}</div></div></div>`;
+  }
+  return `<div class="row">
+    <div class="time">${e.start}<span class="end">${e.ende}${dayTag}</span></div>
+    <div class="body">
+      <div class="f">${esc(e.fach)}</div>
+      <div class="d">${e.dozent ? esc(e.dozent)+" · " : ""}<span class="r">Raum ${esc(e.raum)}</span></div>
+    </div></div>`;
+}
+
+// --- KLAUSUREN-Ansicht ---
+function renderExams() {
+  const ks = DATA.klausur.klausuren.slice();
+  const meta = DATA.klausur.meta || {};
+  const fest = ks.filter(k => k.termin_fest).sort((a,b)=>(parseDate(a.datum)||0)-(parseDate(b.datum)||0));
+  const soft = ks.filter(k => !k.termin_fest);
+
+  let html = "";
+  if (meta.zeitraum || meta.ort) {
+    html += `<div class="next-label">Prüfungszeitraum ${esc(meta.zeitraum||"")} · ${esc(meta.ort||"")}</div>`;
+  }
+  for (const k of fest) {
+    const d = parseDate(k.datum);
+    const du = d ? daysUntil(d) : null;
+    let cd = "";
+    if (du !== null) {
+      if (du < 0) cd = "vorbei";
+      else if (du === 0) cd = "heute!";
+      else if (du === 1) cd = "morgen";
+      else cd = "in " + du + " Tagen";
+    }
+    const mod = k.modul.split(" - ");
+    html += `<div class="exam">
+      <div class="top-line">
+        <div class="dt">${d ? WD[d.getDay()]+", "+fmtDateShort(d) : ""}</div>
+        <div class="cd">${cd}</div>
+      </div>
+      <div class="mod">${esc(mod[0])}</div>
+      ${mod.length>1 ? `<div class="sub">${esc(mod.slice(1).join(" · "))}</div>` : ""}
+      <div class="grid">
+        <span class="chip">🕐 <b>${esc(k.zeit)}</b></span>
+        ${k.raum ? `<span class="chip">📍 <b>${esc(k.raum)}</b></span>`:""}
+        ${k.dozent ? `<span class="chip">👤 <b>${esc(k.dozent)}</b></span>`:""}
+      </div></div>`;
+  }
+  if (soft.length) {
+    html += `<div class="next-label">Ohne festen Termin</div>`;
+    for (const k of soft) {
+      const mod = k.modul.split(" - ");
+      html += `<div class="exam soft">
+        <div class="mod">${esc(mod[0])}</div>
+        ${mod.length>1 ? `<div class="sub">${esc(mod.slice(1).join(" · "))}</div>`:""}
+        <div class="grid">
+          ${k.dozent ? `<span class="chip">👤 <b>${esc(k.dozent)}</b></span>`:""}
+          ${k.hinweis ? `<span class="chip">${esc(k.hinweis)}</span>`:""}
+        </div></div>`;
+    }
+  }
+  return html || `<div class="status">Keine Klausuren gefunden.</div>`;
+}
+
+// --- WOCHE-Ansicht ---
+function renderWeek() {
+  const base = startOfWeek(new Date());
+  base.setDate(base.getDate() + weekOffset*7);
+  const today = new Date();
+
+  let kw = "";
+  const first = entriesFor(base)[0] || entriesFor(new Date(base.getTime()+86400000))[0];
+  if (first) kw = first.kw;
+
+  let html = `<div class="weeknav">
+    <button onclick="changeWeek(-1)">‹</button>
+    <div class="wk">${fmtDateShort(base)} – ${fmtDateShort(new Date(base.getTime()+4*86400000))}<span>${kw?"KW "+kw:""}${weekOffset===0?" · diese Woche":""}</span></div>
+    <button onclick="changeWeek(1)">›</button>
+  </div>`;
+
+  let any = false;
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(base); d.setDate(d.getDate()+i);
+    const list = entriesFor(d);
+    if (!list.length) continue;
+    any = true;
+    const isToday = sameDay(d, today);
+    html += `<div class="day">
+      <h3 class="${isToday?"today":""}">${WD_FULL[d.getDay()]} <span>${fmtDateShort(d)}${isToday?" · heute":""}</span></h3>`;
+    // doppelte Bloecke (gleicher Block, gespaltene Zelle) zusammen lassen
+    for (const e of list) html += rowHTML(e);
+    html += `</div>`;
+  }
+  if (!any) html += `<div class="status">In dieser Woche keine Einträge<br>(evtl. vorlesungsfreie Zeit).</div>`;
+  return html;
+}
+function changeWeek(d) { weekOffset += d; render(); }
+
+// --- Rendering-Dispatcher ---
+let activeView = "now";
+function render() {
+  if (!DATA) return;
+  const app = document.getElementById("app");
+  let inner = "";
+  if (activeView === "now") inner = renderNow();
+  else if (activeView === "exams") inner = renderExams();
+  else if (activeView === "week") inner = renderWeek();
+
+  const stand = DATA.stand ? `<div class="stand" style="text-align:right;margin-top:18px;">Daten aktualisiert: ${new Date(DATA.stand).toLocaleString("de-DE")}</div>` : "";
+  app.innerHTML = `<div class="view active">${inner}${stand}</div>`;
+}
+
+function esc(s) { return (s==null?"":String(s)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// --- Tabs ---
+document.querySelectorAll(".tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeView = btn.dataset.view;
+    if (activeView !== "week") weekOffset = 0;
+    render();
+  });
+});
+
+// --- Start ---
+tickClock();
+setInterval(tickClock, 10000);
+setInterval(() => { if (activeView === "now") render(); }, 60000); // Jetzt-Ansicht minütlich auffrischen
+load();
+</script>
+</body>
+</html>
