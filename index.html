@@ -152,6 +152,34 @@
   .gactions { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 18px; }
   .addsem { width: 100%; background: var(--card); border: 1px dashed var(--line); color: var(--muted); border-radius: 14px; padding: 14px; font-weight: 600; cursor: pointer; font-size: 0.95rem; }
   .ghint { color: var(--dim); font-size: 0.8rem; margin: 4px 2px 16px; }
+  /* WOCHE Umschalter + Raster */
+  .wtoggle { display:flex; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:4px; margin-bottom:14px; width:fit-content; }
+  .wtoggle button { background:transparent; border:none; color:var(--muted); padding:8px 18px; border-radius:9px; font-weight:600; font-size:0.88rem; cursor:pointer; font-family:var(--body); }
+  .wtoggle button.on { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; }
+  .rgrid { display:grid; grid-template-columns:36px repeat(5,1fr); gap:5px; }
+  .rhead { text-align:center; font-size:0.74rem; font-weight:700; color:var(--muted); padding:5px 0; }
+  .rhead.today { color:var(--accent); }
+  .rhead span { display:block; color:var(--dim); font-weight:500; font-size:0.68rem; }
+  .rtime { font-size:0.6rem; color:var(--dim); font-variant-numeric:tabular-nums; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; padding-right:3px; text-align:right; line-height:1.3; }
+  .rcell { min-height:72px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-radius:9px; }
+  html[data-theme="light"] .rcell { background:rgba(0,0,0,0.02); }
+  .rtile { min-height:72px; border:1px solid transparent; border-radius:9px; padding:7px 5px; display:flex; flex-direction:column; gap:2px; cursor:pointer; position:relative; overflow:hidden; transition:transform .12s; }
+  .rtile:active { transform:scale(0.95); }
+  .rtile .rk { font-family:var(--display); font-weight:800; font-size:0.92rem; line-height:1; }
+  .rtile .rr { font-size:0.6rem; color:var(--muted); }
+  .rtile.multi::after { content:"2"; position:absolute; top:3px; right:4px; font-size:0.52rem; background:rgba(0,0,0,0.25); width:13px; height:13px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; }
+  .rtile.special { background:rgba(255,255,255,0.03); color:var(--dim); align-items:center; justify-content:center; text-align:center; }
+  .rtile.special .rk { font-size:0.6rem; font-weight:600; }
+  .rlegend { color:var(--dim); font-size:0.72rem; line-height:1.6; margin-top:16px; }
+  /* Detail-Sheet */
+  .sheet-bg { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); display:none; align-items:flex-end; justify-content:center; z-index:60; }
+  .sheet-bg.open { display:flex; }
+  .sheet { background:var(--card); border:1px solid var(--line); border-radius:24px 24px 0 0; padding:24px 22px calc(30px + env(safe-area-inset-bottom)); width:100%; max-width:760px; animation:sheetup .25s ease; }
+  @keyframes sheetup { from{transform:translateY(100%);} to{transform:none;} }
+  .sheet .sk { font-family:var(--display); font-weight:800; font-size:1.6rem; }
+  .sheet .srow { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-top:1px solid var(--line); margin-top:6px; }
+  .sheet .srow .l { color:var(--muted); } .sheet .srow .v { font-weight:600; text-align:right; }
+  .sheet .close { width:100%; margin-top:18px; background:var(--line); color:var(--txt); border:none; padding:13px; border-radius:12px; font-weight:600; font-size:0.95rem; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -169,6 +197,7 @@
   <button data-view="exams">Klausuren</button>
   <button data-view="grades">Noten</button>
 </nav>
+<div class="sheet-bg" id="tilesheetbg" onclick="if(event.target===this)closeTile()"><div class="sheet" id="tilesheet"></div></div>
 <script>
 const MONTHS = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
 const WD = ["So","Mo","Di","Mi","Do","Fr","Sa"];
@@ -179,6 +208,13 @@ const FACH_COLORS = {
   "Wiss.Theorie":"#c792ea","WissArb":"#e6a23c"
 };
 function fachColor(f){ if(FACH_COLORS[f]) return FACH_COLORS[f]; let h=0; for(const c of (f||"")) h=(h*31+c.charCodeAt(0))%360; return `hsl(${h} 70% 62%)`; }
+const FACH_KURZ = {
+  "FDL-Marketing":"FDL","Organisation":"ORG","Personal":"PERS","Recht":"RE",
+  "Regulierung":"REG","RisikoMgt":"RM","VWL":"VWL","VersMathe":"VMA",
+  "Wiss.Theorie":"WT","WissArb":"WA"
+};
+function fachKurz(f){ if(FACH_KURZ[f]) return FACH_KURZ[f]; return (f||"").replace(/[^A-Za-zÄÖÜ]/g,"").slice(0,3).toUpperCase(); }
+let weekMode = "list"; // "list" | "grid"
 let DATA=null, weekOffset=0, activeView="now";
 function parseDate(s){ const m=(s||"").match(/(\d{2})\.(\d{2})\.(\d{4})/); return m?new Date(+m[3],+m[2]-1,+m[1]):null; }
 function parseTime(d,hhmm){ const [h,mi]=hhmm.split(":").map(Number); const x=new Date(d); x.setHours(h,mi,0,0); return x; }
@@ -275,13 +311,65 @@ function renderExams(){
 function renderWeek(){
   const base=startOfWeek(new Date()); base.setDate(base.getDate()+weekOffset*7); const today=new Date();
   let kw=""; for(let i=0;i<5;i++){ const d=new Date(base); d.setDate(d.getDate()+i); const l=entriesFor(d); if(l.length){kw=l[0].kw;break;} }
-  let html=`<div class="weeknav"><button onclick="changeWeek(-1)">‹</button><div class="wk">${fmtDateShort(base)} – ${fmtDateShort(new Date(base.getTime()+4*86400000))}<span>${kw?"KW "+kw:""}${weekOffset===0?" · diese Woche":""}</span></div><button onclick="changeWeek(1)">›</button></div><div class="weekgrid">`;
+  const toggle=`<div class="wtoggle"><button class="${weekMode==='list'?'on':''}" onclick="setWeekMode('list')">Liste</button><button class="${weekMode==='grid'?'on':''}" onclick="setWeekMode('grid')">Raster</button></div>`;
+  const nav=`<div class="weeknav"><button onclick="changeWeek(-1)">‹</button><div class="wk">${fmtDateShort(base)} – ${fmtDateShort(new Date(base.getTime()+4*86400000))}<span>${kw?"KW "+kw:""}${weekOffset===0?" · diese Woche":""}</span></div><button onclick="changeWeek(1)">›</button></div>`;
+  if(weekMode==="grid") return toggle+nav+renderWeekGrid(base,today);
+  let html=toggle+nav+`<div class="weekgrid">`;
   for(let i=0;i<5;i++){ const d=new Date(base); d.setDate(d.getDate()+i); const groups=groupedFor(d); const ex=examsFor(d); const isToday=sameDay(d,today);
     html+=`<div class="day"><h3 class="${isToday?"today":""}">${WD_FULL[d.getDay()]} <span>${fmtDateShort(d)}${isToday?" · heute":""}</span></h3>`;
     if(!groups.length&&!ex.length){ html+=`<div class="nothing">frei</div>`; } else { for(const g of groups) html+=groupRowHTML(g,{}); for(const k of ex) html+=examRowHTML(k); }
     html+=`</div>`; }
   html+=`</div>`; return html;
 }
+function renderWeekGrid(base,today){
+  const BLOCKS=[["08:30","11:45"],["12:30","15:45"],["16:00","17:30"]];
+  let h=`<div class="rgrid"><div></div>`;
+  for(let i=0;i<5;i++){ const d=new Date(base); d.setDate(d.getDate()+i); const isToday=sameDay(d,today);
+    h+=`<div class="rhead ${isToday?'today':''}">${WD[d.getDay()]}<span>${d.getDate()}.${d.getMonth()+1}.</span></div>`; }
+  for(let b=0;b<3;b++){
+    h+=`<div class="rtime">${BLOCKS[b][0]}<br>${BLOCKS[b][1]}</div>`;
+    for(let i=0;i<5;i++){ const d=new Date(base); d.setDate(d.getDate()+i);
+      const groups=groupedFor(d).filter(g=>g.block===b);
+      // Klausuren dem zeitlich passenden Block zuordnen: <12h->0, 12-15:59->1, >=16h->2
+      const exHere=examsFor(d).filter(k=>{ const hh=parseInt((k.zeit||"").slice(0,2),10); const blk = isNaN(hh)?0 : hh<12?0 : hh<16?1 : 2; return blk===b; });
+      if(exHere.length){
+        const k=exHere[0];
+        h+=`<div class="rtile" style="background:color-mix(in srgb,var(--exam) 16%,transparent);border-color:color-mix(in srgb,var(--exam) 40%,transparent);color:var(--exam)" onclick='openTile(${esc(JSON.stringify({exam:true,modul:k.modul,zeit:k.zeit,raum:k.raum,dozent:k.dozent})).replace(/'/g,"&#39;")})'><div class="rk">📝</div><div class="rr">${esc((k.zeit||"").split("-")[0])}</div></div>`;
+        continue;
+      }
+      if(!groups.length){ h+=`<div class="rcell"></div>`; continue; }
+      const g=groups[0];
+      if(g.special){ h+=`<div class="rtile special"><div class="rk">${esc(g.fach.length>9?g.fach.slice(0,8)+'…':g.fach)}</div></div>`; continue; }
+      const multi=g.faecher.length>1;
+      const f=g.faecher[0]; const col=fachColor(f.fach); const kurz=fachKurz(f.fach);
+      const payload={multi,start:g.start,ende:g.ende,faecher:g.faecher};
+      h+=`<div class="rtile ${multi?'multi':''}" style="background:color-mix(in srgb,${col} 16%,transparent);border-color:color-mix(in srgb,${col} 40%,transparent);color:${col}" onclick='openTile(${esc(JSON.stringify(payload)).replace(/'/g,"&#39;")})'><div class="rk">${kurz}</div><div class="rr">${esc(f.raum)}</div></div>`;
+    }
+  }
+  h+=`</div><div class="rlegend">Tippe eine Kachel für Details · Kürzel: ${Object.entries(FACH_KURZ).map(([k,v])=>v+"="+k).join(" · ")}</div>`;
+  return h;
+}
+function setWeekMode(m){ weekMode=m; try{ localStorage.setItem("weekmode",m); }catch(e){} render(); }
+function openTile(data){
+  let inner;
+  if(data.exam){
+    const mod=data.modul.split(" - ");
+    inner=`<div class="sk" style="color:var(--exam)">📝 ${esc(mod[0])}</div>${mod.length>1?`<div style="color:var(--muted);margin-top:4px;">${esc(mod.slice(1).join(" · "))}</div>`:""}
+      <div class="srow"><span class="l">Zeit</span><span class="v">${esc(data.zeit)}</span></div>
+      <div class="srow"><span class="l">Raum</span><span class="v">${esc(data.raum||"–")}</span></div>
+      <div class="srow"><span class="l">Dozent</span><span class="v">${esc(data.dozent||"–")}</span></div>`;
+  } else {
+    const titel=data.faecher.map(f=>esc(f.fach)).join(" / ");
+    const col=fachColor(data.faecher[0].fach);
+    inner=`<div class="sk" style="color:${col}">${titel}</div>
+      <div class="srow"><span class="l">Zeit</span><span class="v">${data.start}–${data.ende}</span></div>`;
+    for(const f of data.faecher){ inner+=`<div class="srow"><span class="l">${esc(f.fach)}</span><span class="v">${f.dozent?esc(f.dozent):"–"} · ${esc(f.raum)}</span></div>`; }
+    if(data.multi) inner+=`<div style="color:var(--warn);font-size:0.85rem;margin-top:12px;">⚠ Zwei Fächer im selben Block – genaue Aufteilung siehe Aushang</div>`;
+  }
+  document.getElementById("tilesheet").innerHTML=inner+`<button class="close" onclick="closeTile()">Schließen</button>`;
+  document.getElementById("tilesheetbg").classList.add("open");
+}
+function closeTile(){ document.getElementById("tilesheetbg").classList.remove("open"); }
 function changeWeek(d){ weekOffset+=d; render(); }
 
 // ============ NOTEN ============
@@ -385,7 +473,7 @@ function render(offline=false){
   document.getElementById("app").innerHTML=`<div class="view">${off}${inner}${stand}</div>`;
 }
 document.querySelectorAll(".tabs button").forEach(btn=>btn.addEventListener("click",()=>{ document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); activeView=btn.dataset.view; if(activeView!=="week") weekOffset=0; render(); }));
-initTheme(); tickClock(); setInterval(tickClock,10000); setInterval(()=>{ if(activeView==="now") render(); },30000); load();
+initTheme(); try{ const wm=localStorage.getItem("weekmode"); if(wm) weekMode=wm; }catch(e){} tickClock(); setInterval(tickClock,10000); setInterval(()=>{ if(activeView==="now") render(); },30000); load();
 </script>
 </body>
 </html>
