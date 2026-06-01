@@ -119,6 +119,37 @@
   .err-box code { background: var(--bg-2); padding: 2px 6px; border-radius: 5px; }
   .stand { font-size: 0.74rem; color: var(--dim); text-align: right; margin-top: 22px; }
   .offline { background: color-mix(in srgb,var(--warn) 14%, var(--card)); border: 1px solid color-mix(in srgb,var(--warn) 35%, var(--line)); color: var(--txt); border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+  /* NOTEN */
+  .gpa-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+  .gpa { background: linear-gradient(150deg, var(--card-hi), var(--card)); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; }
+  .gpa .t { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 700; }
+  .gpa .v { font-family: var(--display); font-weight: 800; font-size: 2.4rem; line-height: 1; margin-top: 8px; }
+  .gpa .sub { color: var(--dim); font-size: 0.78rem; margin-top: 6px; }
+  .gpa.total .v { color: var(--accent); }
+  .sem { background: var(--card); border: 1px solid var(--line); border-radius: 17px; padding: 16px 16px 8px; margin-bottom: 14px; }
+  .sem .shead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
+  .sem .shead .name { font-family: var(--display); font-weight: 700; font-size: 1.1rem; }
+  .sem .shead .savg { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .sem .shead .savg span { color: var(--dim); font-weight: 400; font-size: 0.78rem; }
+  .grade-row { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+  .grade-row .gf { flex: 1; min-width: 0; }
+  .grade-row .gf .gn { font-weight: 600; }
+  .grade-row .gf .ge { color: var(--dim); font-size: 0.78rem; }
+  .grade-row .gg { font-family: var(--display); font-weight: 800; font-size: 1.3rem; min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+  .grade-row .del { background: none; border: none; color: var(--dim); font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
+  .grade-row .del:active { color: var(--exam); }
+  .gnote-1 { color: #2fd47a; } .gnote-2 { color: #8bd450; } .gnote-3 { color: #ffb454; } .gnote-4 { color: #ff8f56; } .gnote-5 { color: #ff6b6b; }
+  .addbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 0 6px; border-top: 1px dashed var(--line); margin-top: 4px; }
+  .addbar input { background: var(--bg-2); border: 1px solid var(--line); color: var(--txt); border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; font-family: var(--body); }
+  .addbar input.fach { flex: 1; min-width: 120px; }
+  .addbar input.note { width: 78px; text-align: center; }
+  .addbar input.ects { width: 78px; text-align: center; }
+  .addbar button.add { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 600; cursor: pointer; font-size: 0.95rem; }
+  .gbtn { background: var(--card); border: 1px solid var(--line); color: var(--txt); border-radius: 12px; padding: 11px 16px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+  .gbtn:active { transform: scale(0.97); }
+  .gactions { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 18px; }
+  .addsem { width: 100%; background: var(--card); border: 1px dashed var(--line); color: var(--muted); border-radius: 14px; padding: 14px; font-weight: 600; cursor: pointer; font-size: 0.95rem; }
+  .ghint { color: var(--dim); font-size: 0.8rem; margin: 4px 2px 16px; }
 </style>
 </head>
 <body>
@@ -134,6 +165,7 @@
   <button data-view="now" class="active">Jetzt</button>
   <button data-view="week">Woche</button>
   <button data-view="exams">Klausuren</button>
+  <button data-view="grades">Noten</button>
 </nav>
 <script>
 const MONTHS = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -249,7 +281,100 @@ function renderWeek(){
   html+=`</div>`; return html;
 }
 function changeWeek(d){ weekOffset+=d; render(); }
+
+// ============ NOTEN ============
+// --- Speicher gekapselt: NUR hier wird gespeichert/geladen. Für Cloud später nur diese 2 Funktionen tauschen. ---
+function loadNotes(){
+  try{ const raw=localStorage.getItem("grades_v1"); if(raw) return JSON.parse(raw); }catch(e){}
+  return { semesters: [ {id:Date.now(), name:"1. Semester", grades:[]} ] };
+}
+function saveNotes(data){
+  try{ localStorage.setItem("grades_v1", JSON.stringify(data)); }catch(e){ alert("Speichern fehlgeschlagen – evtl. Speicher voll oder privater Modus."); }
+}
+let GRADES = null;
+
+function gradeClass(n){ const r=Math.round(n); return "gnote-"+Math.min(5,Math.max(1,r)); }
+// gewichteter (falls ECTS) oder einfacher Schnitt
+function avg(grades){
+  const valid=grades.filter(g=>typeof g.note==="number"&&!isNaN(g.note));
+  if(!valid.length) return null;
+  const anyEcts=valid.some(g=>g.ects>0);
+  if(anyEcts){ let sum=0,w=0; for(const g of valid){ const e=g.ects>0?g.ects:1; sum+=g.note*e; w+=e; } return sum/w; }
+  return valid.reduce((a,g)=>a+g.note,0)/valid.length;
+}
+function fmtNote(n){ return n==null?"–":n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function allGrades(){ return GRADES.semesters.flatMap(s=>s.grades); }
+
+function renderGrades(){
+  if(!GRADES) GRADES=loadNotes();
+  const total=avg(allGrades());
+  const totalCount=allGrades().filter(g=>typeof g.note==="number").length;
+  let html=`<div class="gpa-cards">
+    <div class="gpa total"><div class="t">Gesamtschnitt</div><div class="v ${total!=null?gradeClass(total):""}">${fmtNote(total)}</div><div class="sub">${totalCount} Fächer gesamt</div></div>
+    <div class="gpa"><div class="t">Semester</div><div class="v">${GRADES.semesters.length}</div><div class="sub">angelegt</div></div>
+  </div>`;
+  html+=`<div class="gactions">
+    <button class="gbtn" onclick="exportNotes()">⬇ Noten sichern (Export)</button>
+    <button class="gbtn" onclick="document.getElementById('importfile').click()">⬆ Noten laden (Import)</button>
+    <input type="file" id="importfile" accept=".json,application/json" style="display:none" onchange="importNotes(event)">
+  </div>`;
+  html+=`<div class="ghint">Tipp: ECTS sind optional. Lässt du sie leer, wird ein einfacher Durchschnitt gerechnet; mit ECTS wird gewichtet (wie an der DHBW). Noten von 1,0 (beste) bis 5,0.</div>`;
+
+  for(const s of GRADES.semesters){
+    const sa=avg(s.grades);
+    html+=`<div class="sem"><div class="shead">
+      <div class="name" contenteditable="true" onblur="renameSem(${s.id}, this.innerText)">${esc(s.name)}</div>
+      <div class="savg">⌀ ${sa!=null?`<span style="color:inherit">${fmtNote(sa)}</span>`:`<span>noch leer</span>`}</div></div>`;
+    for(const g of s.grades){
+      html+=`<div class="grade-row">
+        <div class="gf"><div class="gn">${esc(g.fach)}</div>${g.ects>0?`<div class="ge">${g.ects} ECTS</div>`:""}</div>
+        <div class="gg ${gradeClass(g.note)}">${g.note.toLocaleString("de-DE",{minimumFractionDigits:1})}</div>
+        <button class="del" onclick="delGrade(${s.id},${g.id})" title="Löschen">✕</button></div>`;
+    }
+    html+=`<div class="addbar">
+      <input class="fach" id="f_${s.id}" placeholder="Fach" />
+      <input class="note" id="n_${s.id}" inputmode="decimal" placeholder="Note" />
+      <input class="ects" id="e_${s.id}" inputmode="numeric" placeholder="ECTS" />
+      <button class="add" onclick="addGrade(${s.id})">+</button>
+    </div></div>`;
+  }
+  html+=`<button class="addsem" onclick="addSem()">+ Semester hinzufügen</button>`;
+  return html;
+}
+function persistAndRerender(){ saveNotes(GRADES); render(); }
+function addSem(){ const n=GRADES.semesters.length+1; GRADES.semesters.push({id:Date.now(), name:n+". Semester", grades:[]}); persistAndRerender(); }
+function renameSem(id,name){ const s=GRADES.semesters.find(x=>x.id===id); if(s){ s.name=(name||"").trim()||s.name; saveNotes(GRADES); } }
+function addGrade(sid){
+  const s=GRADES.semesters.find(x=>x.id===sid); if(!s) return;
+  const fEl=document.getElementById("f_"+sid), nEl=document.getElementById("n_"+sid), eEl=document.getElementById("e_"+sid);
+  const fach=(fEl.value||"").trim();
+  const note=parseFloat((nEl.value||"").replace(",","."));
+  const ects=parseFloat((eEl.value||"").replace(",","."))||0;
+  if(!fach){ fEl.focus(); return; }
+  if(isNaN(note)||note<1||note>5){ alert("Bitte eine Note zwischen 1,0 und 5,0 eingeben."); nEl.focus(); return; }
+  s.grades.push({id:Date.now(), fach, note, ects: ects>0?ects:0});
+  persistAndRerender();
+}
+function delGrade(sid,gid){ const s=GRADES.semesters.find(x=>x.id===sid); if(!s) return; s.grades=s.grades.filter(g=>g.id!==gid); persistAndRerender(); }
+
+function exportNotes(){
+  const blob=new Blob([JSON.stringify(GRADES,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  const stamp=new Date().toISOString().slice(0,10);
+  a.href=url; a.download="noten-"+stamp+".json"; a.click(); URL.revokeObjectURL(url);
+}
+function importNotes(ev){
+  const file=ev.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result);
+      if(!d||!Array.isArray(d.semesters)) throw new Error("Falsches Format");
+      GRADES=d; saveNotes(GRADES); render(); alert("Noten erfolgreich geladen.");
+    }catch(e){ alert("Import fehlgeschlagen: "+e.message); } };
+  r.readAsText(file);
+}
+
 function render(offline=false){
+  if(activeView==="grades"){ document.getElementById("app").innerHTML=`<div class="view">${renderGrades()}</div>`; return; }
   if(!DATA) return;
   let inner=activeView==="now"?renderNow():activeView==="week"?renderWeek():renderExams();
   const off=offline?`<div class="offline">⚠ Offline – zeige zuletzt gespeicherte Version</div>`:"";
